@@ -166,7 +166,10 @@ with tab2:
     with col2:
         uploaded_jd = st.file_uploader("📝 Job Description", type=["pdf", "docx"])
     with col3:
-        uploaded_interview = st.file_uploader("🗒️ Interview Sheet", type=["pdf", "docx"])
+        # ✅ Allow multiple interview sheets
+        uploaded_interviews = st.file_uploader(
+            "🗒️ Interview Sheets", type=["pdf", "docx"], accept_multiple_files=True
+        )
     with col4:
         uploaded_equity = st.file_uploader("📊 Internal Equity Excel", type=["xlsx"])
 
@@ -190,10 +193,14 @@ with tab2:
                 time.sleep(1)
                 scores = mock_parse_cv_and_jd()
 
-            if uploaded_interview:
-                with st.spinner("🧠 Evaluating Interview..."):
+            # Interview is optional; if multiple provided, aggregate (use best score)
+            if uploaded_interviews:
+                with st.spinner("🧠 Evaluating Interview Sheet(s)..."):
                     time.sleep(1)
-                    scores.update(mock_parse_interview_sheet())
+                    perf_scores = []
+                    for _ in uploaded_interviews:
+                        perf_scores.append(mock_parse_interview_sheet()["performanceScore"])
+                    scores["performanceScore"] = max(perf_scores) if perf_scores else 0
             else:
                 scores.setdefault("performanceScore", 0)
 
