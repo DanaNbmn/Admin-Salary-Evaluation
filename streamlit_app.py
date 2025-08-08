@@ -8,7 +8,7 @@ from pandas import ExcelWriter
 from docx import Document
 from docx.shared import Inches
 
---- Helper Functions ---
+^ --- Helper Functions ---
 
 def mock_parse_cv_and_jd():
 return {
@@ -294,3 +294,4 @@ Candidate Name: {name}
       file_name=f"{name.replace(' ', '_').lower()}_evaluation_report.docx",  
       mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"  
   )
+
