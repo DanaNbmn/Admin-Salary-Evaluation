@@ -105,6 +105,10 @@ def parse_band_grade(grade_text: str):
     m = re.search(r'([A-Za-z])\s*[-– ]?\s*(\d+)', str(grade_text).strip())
     return (m.group(1).upper(), int(m.group(2))) if m else (None, None)
 
+# --- helper to mark manual override of AI rec ---
+def _mark_ai_rec_manual():
+    st.session_state.ai_rec_manual = True
+
 def generate_word_report(name, title, grade, education_score, experience_score, performance_score,
                          total_score, interval_options, placement, selected_step,
                          recommended_salary, final_salary, budget_threshold, hr_comments, df_peers):
@@ -248,23 +252,48 @@ with tab2:
 
     selected_step = st.selectbox("✅ Select Final Step", interval_options)
 
-    # ---- Auto-fill AI-Recommended Salary from built-in scale
-    auto_rec = 0
+    # ---- Auto-fill AI-Recommended Salary from built-in scale (with manual override behavior)
     band_letter, grade_num = parse_band_grade(grade)
+    auto_rec = 0
     if band_letter and grade_num and selected_step:
         auto_rec = salary_scale.get(band_letter, {}).get(grade_num, [0]*15)[int(selected_step) - 1]
-
-    # Keep override stable; fix int types for Streamlit
     auto_rec_int = int(auto_rec) if auto_rec else 0
-    if 'ai_rec_salary' not in st.session_state:
+
+    # Session state init
+    if "ai_rec_salary" not in st.session_state:
         st.session_state.ai_rec_salary = auto_rec_int
-    if auto_rec_int and int(st.session_state.ai_rec_salary) == 0:
-        st.session_state.ai_rec_salary = auto_rec_int
+    if "ai_rec_manual" not in st.session_state:
+        st.session_state.ai_rec_manual = False
+    if "last_scale_tuple" not in st.session_state:
+        st.session_state.last_scale_tuple = (None, None, None)
+
+    # If (band, grade, step) changed and user hasn't manually overridden, refresh from scale
+    current_tuple = (band_letter, grade_num, int(selected_step) if selected_step else None)
+    if current_tuple != st.session_state.last_scale_tuple:
+        st.session_state.last_scale_tuple = current_tuple
+        if not st.session_state.ai_rec_manual:
+            st.session_state.ai_rec_salary = auto_rec_int
 
     st.subheader("Step 4: Salary Recommendation")
     budget_threshold = st.number_input("💰 Budget Threshold (AED)", step=500, value=0)
-    recommended_salary = st.number_input("🤖 AI-Recommended Salary (AED)", step=500, value=int(st.session_state.ai_rec_salary or 0))
-    st.session_state.ai_rec_salary = int(recommended_salary)
+
+    # Number input that marks manual override when user edits
+    recommended_salary = st.number_input(
+        "🤖 AI-Recommended Salary (AED)",
+        step=500,
+        value=int(st.session_state.ai_rec_salary or 0),
+        key="recommended_salary",
+        on_change=_mark_ai_rec_manual,
+    )
+    # Keep session in sync
+    st.session_state.ai_rec_salary = int(st.session_state.recommended_salary)
+
+    # Quick reset to scale if needed
+    if st.session_state.ai_rec_manual and st.button("↩️ Reset AI-Recommended to Scale"):
+        st.session_state.ai_rec_manual = False
+        st.session_state.ai_rec_salary = auto_rec_int
+        st.session_state.recommended_salary = auto_rec_int
+
     final_salary = st.number_input("✅ Final Recommended Salary (AED)", step=500, value=0)
 
     st.subheader("Step 5: Internal Equity Analysis")
@@ -342,6 +371,8 @@ HR Final Comments:
 """.strip()
 
         st.text_area("📋 Final Summary", summary, height=250)
+
+        # Download text summary
         st.download_button("📤 Download Final Summary (.txt)", data=summary, file_name="salary_summary.txt")
 
         # Word report
