@@ -3,4 +3,3 @@ pandas
 altair
 openpyxl
 python-docx
-matplotlib
