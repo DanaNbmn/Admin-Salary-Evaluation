@@ -1,4 +1,6 @@
 streamlit
 pandas
-python-docx
+altair
 openpyxl
+python-docx
+matplotlib
