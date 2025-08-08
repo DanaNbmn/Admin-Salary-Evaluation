@@ -170,24 +170,47 @@ with tab2:
     with col4:
         uploaded_equity = st.file_uploader("📊 Internal Equity Excel", type=["xlsx"])
 
+    # Initialize stored AI scores (persist between reruns)
+    if "ai_scores" not in st.session_state:
+        st.session_state.ai_scores = {
+            "educationScore": 0,
+            "experienceScore": 0,
+            "performanceScore": 0
+        }
+
     st.subheader("Step 3: AI Evaluation + Manual Adjustment")
-    if uploaded_cv and uploaded_jd:
-        with st.spinner("🔍 Evaluating CV & JD..."):
-            time.sleep(1)
-            ai_scores = mock_parse_cv_and_jd()
-    else:
-        ai_scores = {"educationScore": 0, "experienceScore": 0}
 
-    if uploaded_interview:
-        with st.spinner("🧠 Evaluating Interview..."):
-            time.sleep(1)
-            ai_scores.update(mock_parse_interview_sheet())
-    else:
-        ai_scores["performanceScore"] = 0
+    # Button-triggered AI analysis only
+    run_ai = st.button("🔎 Run AI Analysis", help="Evaluates CV, JD, and Interview (if provided).")
+    if run_ai:
+        if not (uploaded_cv and uploaded_jd):
+            st.warning("Please upload both the CV and Job Description to run AI analysis.")
+        else:
+            with st.spinner("🔍 Evaluating CV & JD..."):
+                time.sleep(1)
+                scores = mock_parse_cv_and_jd()
 
-    education_score = st.slider("🎓 Education Score (Editable)", 0, 10, ai_scores["educationScore"])
-    experience_score = st.slider("💼 Experience Score (Editable)", 0, 10, ai_scores["experienceScore"])
-    performance_score = st.slider("🚀 Performance Score (Editable)", 0, 10, ai_scores["performanceScore"])
+            if uploaded_interview:
+                with st.spinner("🧠 Evaluating Interview..."):
+                    time.sleep(1)
+                    scores.update(mock_parse_interview_sheet())
+            else:
+                scores.setdefault("performanceScore", 0)
+
+            # Persist results; won’t change unless the button is pressed again
+            st.session_state.ai_scores = scores
+            st.success("AI analysis completed. You can manually adjust scores below.")
+
+    # Sliders read from stored AI results; manual changes do NOT re-run AI.
+    education_score = st.slider(
+        "🎓 Education Score (Editable)", 0, 10, int(st.session_state.ai_scores.get("educationScore", 0))
+    )
+    experience_score = st.slider(
+        "💼 Experience Score (Editable)", 0, 10, int(st.session_state.ai_scores.get("experienceScore", 0))
+    )
+    performance_score = st.slider(
+        "🚀 Performance Score (Editable)", 0, 10, int(st.session_state.ai_scores.get("performanceScore", 0))
+    )
 
     total_score = education_score + experience_score + performance_score
     interval_options, placement = get_step_interval(total_score)
