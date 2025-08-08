@@ -67,10 +67,6 @@ def load_filtered_equity_data(uploaded_file, position_title_input: str):
 # ---------- Salary Scale helpers ----------
 
 def _extract_step_number(col_name: str):
-    """
-    Accepts headers like 'Minimum 1', '1', 'Medium 8', 'Maximum 15', 'Step 3', etc.
-    Returns an int step or None if no match.
-    """
     s = str(col_name).strip().lower()
     m = re.findall(r'(\d+)', s)
     if not m:
@@ -78,12 +74,6 @@ def _extract_step_number(col_name: str):
     return int(m[-1])
 
 def load_salary_scale(scale_file):
-    """
-    Supports:
-      A) Long table: columns Band, Grade, Step, Amount
-      B) Wide table: columns Band, Grade, [Step % optional], and step columns (e.g., 'Minimum 1', '2', ..., 'Maximum 15')
-    Returns normalized DataFrame with: band(str), grade(Int), step(Int), amount(float)
-    """
     try:
         df = pd.read_excel(scale_file)
     except Exception as e:
@@ -118,7 +108,7 @@ def load_salary_scale(scale_file):
                 step_cols.append((c, step_num))
 
         if not step_cols:
-            return None, "❌ Could not detect step columns in Salary Scale. Provide 'Step/Amount' or columns like '1..15'."
+            return None, "❌ Could not detect step columns in Salary Scale."
 
         melt_cols = [band_col, grade_col] + [c for c, _ in step_cols]
         wide = df[melt_cols].copy()
@@ -136,10 +126,6 @@ def load_salary_scale(scale_file):
         return long_df[['band', 'grade', 'step', 'amount']], None
 
 def parse_band_grade(grade_text: str):
-    """
-    Accepts formats like 'E-6', 'E 6', 'e6', 'Band E Grade 6'
-    Returns (band:str, grade:int) or (None, None)
-    """
     if not grade_text:
         return None, None
     s = str(grade_text).strip()
@@ -260,7 +246,6 @@ with tab2:
     with col5:
         uploaded_scale = st.file_uploader("💼 Salary Scale (xlsx)", type=["xlsx"])
 
-    # Load salary scale once and keep in session
     if uploaded_scale is not None:
         scale_df, scale_err = load_salary_scale(uploaded_scale)
         if scale_err:
@@ -271,7 +256,6 @@ with tab2:
     elif 'salary_scale_df' not in st.session_state:
         st.session_state['salary_scale_df'] = None
 
-    # Initialize stored AI scores (persist between reruns)
     if "ai_scores" not in st.session_state:
         st.session_state.ai_scores = {"educationScore": 0, "experienceScore": 0, "performanceScore": 0}
 
@@ -314,7 +298,6 @@ with tab2:
 
     selected_step = st.selectbox("✅ Select Final Step", interval_options)
 
-    # Auto-fill AI-Recommended Salary from scale
     auto_rec = 0
     band_letter, grade_num = parse_band_grade(grade)
     scale_df = st.session_state.get('salary_scale_df', None)
@@ -327,16 +310,21 @@ with tab2:
         if not match.empty:
             auto_rec = float(match.iloc[0]['amount'])
 
-    # Keep user overrides stable across reruns
+    # Fix: use int to avoid mixed numeric type error
+    auto_rec_int = int(round(auto_rec)) if auto_rec else 0
     if 'ai_rec_salary' not in st.session_state:
-        st.session_state.ai_rec_salary = auto_rec
-    if auto_rec and (st.session_state.ai_rec_salary == 0):
-        st.session_state.ai_rec_salary = auto_rec
+        st.session_state.ai_rec_salary = auto_rec_int
+    if auto_rec_int and int(st.session_state.ai_rec_salary) == 0:
+        st.session_state.ai_rec_salary = auto_rec_int
 
     st.subheader("Step 4: Salary Recommendation")
     budget_threshold = st.number_input("💰 Budget Threshold (AED)", step=500, value=0)
-    recommended_salary = st.number_input("🤖 AI-Recommended Salary (AED)", step=500, value=float(st.session_state.ai_rec_salary or 0))
-    st.session_state.ai_rec_salary = recommended_salary
+    recommended_salary = st.number_input(
+        "🤖 AI-Recommended Salary (AED)",
+        step=500,
+        value=int(st.session_state.ai_rec_salary or 0)
+    )
+    st.session_state.ai_rec_salary = int(recommended_salary)
     final_salary = st.number_input("✅ Final Recommended Salary (AED)", step=500, value=0)
 
     st.subheader("Step 5: Internal Equity Analysis")
@@ -416,21 +404,4 @@ HR Final Comments:
         st.text_area("📋 Final Summary", summary, height=250)
         st.download_button("📤 Download Final Summary (.txt)", data=summary, file_name="salary_summary.txt")
 
-        doc = generate_word_report(
-            name, title, grade,
-            education_score, experience_score, performance_score,
-            total_score, interval_options, placement, selected_step,
-            recommended_salary, final_salary, budget_threshold,
-            hr_comments, df_peers if isinstance(df_peers, pd.DataFrame) else None
-        )
-
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-
-        st.download_button(
-            label="📥 Download Full Report (.docx)",
-            data=buffer,
-            file_name=f"{(name or 'candidate').replace(' ', '_').lower()}_evaluation_report.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+        doc
